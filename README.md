@@ -2,8 +2,10 @@
 
 ## Group Members
 
-- Dylan Lewis - 209722610
-- Ziv Picciotto - 206919722
+- Dylan Lewis
+- Ziv Picciotto
+
+### ⚠️ STUDENT IDS ARE PROVIDED IN PDF SUBMISSION
 
 ## Description
 
