@@ -10,6 +10,8 @@ const Colors = {
   ORANGE: 0xf88158,
 };
 const GRAVITY = -9.8;
+const COURT_WIDTH = 30;
+const COURT_DEPTH = 15;
 // -----------------------------------------
 
 const scene = new THREE.Scene();
@@ -51,6 +53,11 @@ let ballVelocity = new THREE.Vector3();
 let isShooting = false;
 let shotPower = 50; // Initial power
 const hoopPositions = [];
+const backboards = [];
+const poles = [];
+const rims = [];
+
+let trajectoryLine;
 
 function degrees_to_radians(degrees) {
   var pi = Math.PI;
@@ -60,7 +67,7 @@ function degrees_to_radians(degrees) {
 // Create basketball court
 function createBasketballCourt() {
   // Court floor - just a simple brown surface
-  const courtGeometry = new THREE.BoxGeometry(30, 0.2, 15);
+  const courtGeometry = new THREE.BoxGeometry(COURT_WIDTH, 0.2, COURT_DEPTH);
   const courtMaterial = new THREE.MeshPhongMaterial({
     color: 0xc68642, // Brown wood color
     shininess: 50,
@@ -133,19 +140,23 @@ function handleKeyDown(e) {
     ballVelocity.set(0, 0, 0);
     shotPower = 50;
     powerElement.innerHTML = `<h3>Power: ${shotPower}%</h3>`;
+    updateTrajectory();
   }
 
   if (e.key === "w") {
     shotPower = Math.min(100, shotPower + 5);
     powerElement.innerHTML = `<h3>Power: ${shotPower}%</h3>`;
+    updateTrajectory();
   }
   if (e.key === "s") {
     shotPower = Math.max(0, shotPower - 5);
     powerElement.innerHTML = `<h3>Power: ${shotPower}%</h3>`;
+    updateTrajectory();
   }
 
   if (e.key === " " && !isShooting) {
     isShooting = true;
+    trajectoryLine.visible = false;
     const targetHoop =
       ballGroup.position.distanceTo(hoopPositions[0]) <
       ballGroup.position.distanceTo(hoopPositions[1])
@@ -216,8 +227,10 @@ function animate() {
       if (Math.abs(ballVelocity.y) < 1) {
         isShooting = false;
         ballVelocity.set(0, 0, 0);
+        updateTrajectory();
       }
     }
+    checkCollisions();
   } else {
     const moveSpeed = 5;
     const rotationSpeed = 0.1;
@@ -238,6 +251,16 @@ function animate() {
       ballGroup.position.x += moveSpeed * delta;
       ballGroup.rotation.z -= rotationSpeed;
     }
+    // Boundary checks
+    ballGroup.position.x = Math.max(
+      -COURT_WIDTH / 2 + ballRadius,
+      Math.min(COURT_WIDTH / 2 - ballRadius, ballGroup.position.x)
+    );
+    ballGroup.position.z = Math.max(
+      -COURT_DEPTH / 2 + ballRadius,
+      Math.min(COURT_DEPTH / 2 - ballRadius, ballGroup.position.z)
+    );
+    updateTrajectory();
   }
 
   // Update controls
@@ -255,6 +278,71 @@ function createCourtElements() {
   createBasketball();
   createCourtLines();
   createBothBaskets();
+  createTrajectoryLine();
+}
+
+function createTrajectoryLine() {
+  const material = new THREE.LineBasicMaterial({
+    color: 0xff0000,
+    linewidth: 2,
+  });
+  const geometry = new THREE.BufferGeometry();
+  trajectoryLine = new THREE.Line(geometry, material);
+  scene.add(trajectoryLine);
+}
+
+function updateTrajectory() {
+  if (isShooting) {
+    trajectoryLine.visible = false;
+    return;
+  }
+  trajectoryLine.visible = true;
+  const points = [];
+  const startPos = ballGroup.position.clone();
+  const targetHoop =
+    startPos.distanceTo(hoopPositions[0]) < startPos.distanceTo(hoopPositions[1])
+      ? hoopPositions[0]
+      : hoopPositions[1];
+  const direction = new THREE.Vector3()
+    .subVectors(targetHoop, startPos)
+    .normalize();
+  const initialSpeed = shotPower / 5;
+  const tempVelocity = direction.multiplyScalar(initialSpeed);
+  tempVelocity.y += 5;
+
+  let tempPos = startPos.clone();
+  for (let i = 0; i < 100; i++) {
+    tempVelocity.y += GRAVITY * 0.016;
+    tempPos.add(tempVelocity.clone().multiplyScalar(0.016));
+    points.push(tempPos.clone());
+    if (tempPos.y < COURT_Y_SURFACE + ballRadius) break;
+  }
+  trajectoryLine.geometry.setFromPoints(points);
+}
+
+function checkCollisions() {
+  const ballBox = new THREE.Box3().setFromObject(ballGroup);
+
+  backboards.forEach((backboard) => {
+    const backboardBox = new THREE.Box3().setFromObject(backboard);
+    if (ballBox.intersectsBox(backboardBox)) {
+      ballVelocity.z *= -1; // Reflect z velocity
+    }
+  });
+
+  poles.forEach((pole) => {
+    const poleBox = new THREE.Box3().setFromObject(pole);
+    if (ballBox.intersectsBox(poleBox)) {
+      ballVelocity.x *= -1; // Reflect x velocity
+    }
+  });
+
+  rims.forEach((rim) => {
+    const rimBox = new THREE.Box3().setFromObject(rim);
+    if (ballBox.intersectsBox(rimBox)) {
+      ballVelocity.y *= -0.8; // Dampen and reflect y
+    }
+  });
 }
 
 function createCourtLines() {
@@ -544,6 +632,7 @@ function createBasket(mirrored = false) {
   pole.castShadow = true;
   pole.position.set(0, COURT_Y_SURFACE + poleHeight / 2, 0);
   basketGroup.add(pole);
+  poles.push(pole);
 
   // arm
   const armLength = 0.5;
@@ -585,6 +674,7 @@ function createBasket(mirrored = false) {
     mirrored ? -armLength - poleDepth / 2 : -(-armLength - poleDepth / 2)
   );
   basketGroup.add(backboard);
+  backboards.push(backboard);
 
   // rim
   const rimRadius = 0.5;
@@ -605,6 +695,7 @@ function createBasket(mirrored = false) {
       : backboardThickness + rimThickness + armLength + rimRadius
   );
   basketGroup.add(rim);
+  rims.push(rim);
 
   // net
   const netGroup = createNetWithLines(rim.position, rimRadius, 0.6, 5, 12);
