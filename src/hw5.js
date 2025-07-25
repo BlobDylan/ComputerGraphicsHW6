@@ -9,9 +9,12 @@ const Colors = {
   WHITE: 0xffffff,
   ORANGE: 0xf88158,
 };
-const GRAVITY = -9.8;
+// --- Physics (tweak these for feel) ---
+const GRAVITY = -9.8; // m/s^2
 const COURT_WIDTH = 30;
 const COURT_DEPTH = 15;
+const BALL_BOUNCINESS = 0.7; // 0 = no bounce, 1 = perfect bounce
+const RIM_BOUNCINESS = 0.8;
 // -----------------------------------------
 
 const scene = new THREE.Scene();
@@ -166,9 +169,12 @@ function handleKeyDown(e) {
     const direction = new THREE.Vector3()
       .subVectors(targetHoop, ballGroup.position)
       .normalize();
-    const initialSpeed = shotPower / 5;
+    // --- Shot power and arc (tweak for feel) ---
+    const initialSpeed = shotPower / 4; // Tweak the divisor to change power sensitivity
+    const upwardForce = 7; // Tweak this for a higher/lower arc
+
     ballVelocity.copy(direction).multiplyScalar(initialSpeed);
-    ballVelocity.y += 5; // Add some initial upward velocity
+    ballVelocity.y += upwardForce;
   }
 
   const state = e.type === "keydown";
@@ -221,7 +227,7 @@ function animate() {
     // Ground collision
     if (ballGroup.position.y < COURT_Y_SURFACE + ballRadius) {
       ballGroup.position.y = COURT_Y_SURFACE + ballRadius;
-      ballVelocity.y *= -0.7; // Restitution
+      ballVelocity.y *= -BALL_BOUNCINESS;
 
       // Stop bouncing if velocity is low
       if (Math.abs(ballVelocity.y) < 1) {
@@ -300,19 +306,23 @@ function updateTrajectory() {
   const points = [];
   const startPos = ballGroup.position.clone();
   const targetHoop =
-    startPos.distanceTo(hoopPositions[0]) < startPos.distanceTo(hoopPositions[1])
+    startPos.distanceTo(hoopPositions[0]) <
+    startPos.distanceTo(hoopPositions[1])
       ? hoopPositions[0]
       : hoopPositions[1];
   const direction = new THREE.Vector3()
     .subVectors(targetHoop, startPos)
     .normalize();
-  const initialSpeed = shotPower / 5;
+
+  // Use the same tweaked values for trajectory prediction
+  const initialSpeed = shotPower / 4;
+  const upwardForce = 7;
   const tempVelocity = direction.multiplyScalar(initialSpeed);
-  tempVelocity.y += 5;
+  tempVelocity.y += upwardForce;
 
   let tempPos = startPos.clone();
   for (let i = 0; i < 100; i++) {
-    tempVelocity.y += GRAVITY * 0.016;
+    tempVelocity.y += GRAVITY * 0.016; // Use a fixed delta for prediction
     tempPos.add(tempVelocity.clone().multiplyScalar(0.016));
     points.push(tempPos.clone());
     if (tempPos.y < COURT_Y_SURFACE + ballRadius) break;
@@ -321,26 +331,49 @@ function updateTrajectory() {
 }
 
 function checkCollisions() {
-  const ballBox = new THREE.Box3().setFromObject(ballGroup);
+  const ballSphere = new THREE.Sphere(ballGroup.position, ballRadius);
 
+  // Backboard collision
   backboards.forEach((backboard) => {
     const backboardBox = new THREE.Box3().setFromObject(backboard);
-    if (ballBox.intersectsBox(backboardBox)) {
-      ballVelocity.z *= -1; // Reflect z velocity
+    if (backboardBox.intersectsSphere(ballSphere)) {
+      // Simple reflection off the backboard
+      ballVelocity.x *= -1;
     }
   });
 
+  // Pole collision
   poles.forEach((pole) => {
     const poleBox = new THREE.Box3().setFromObject(pole);
-    if (ballBox.intersectsBox(poleBox)) {
-      ballVelocity.x *= -1; // Reflect x velocity
+    if (poleBox.intersectsSphere(ballSphere)) {
+      ballVelocity.x *= -1;
     }
   });
 
-  rims.forEach((rim) => {
-    const rimBox = new THREE.Box3().setFromObject(rim);
-    if (ballBox.intersectsBox(rimBox)) {
-      ballVelocity.y *= -0.8; // Dampen and reflect y
+  // Rim collision
+  rims.forEach((rim, index) => {
+    const rimCenter = hoopPositions[index];
+    const rimRadius = 0.5;
+    const rimY = rimCenter.y;
+
+    const distToRimCenter = ballGroup.position.distanceTo(
+      new THREE.Vector3(rimCenter.x, ballGroup.position.y, rimCenter.z)
+    );
+
+    // Check if ball is roughly at rim height and within its horizontal radius
+    if (
+      Math.abs(ballGroup.position.y - rimY) < ballRadius &&
+      distToRimCenter < rimRadius + ballRadius
+    ) {
+      // If ball is moving downwards, it might be a score (handled later)
+      // For now, let's make it bounce off the rim
+      if (ballVelocity.y < 0) {
+        // Don't dampen here to avoid the "slow slide"
+        // A more complex collision response would be needed for perfect physics
+      } else {
+        // Bounce off the top of the rim if moving upwards
+        ballVelocity.y *= -RIM_BOUNCINESS;
+      }
     }
   });
 }
@@ -652,8 +685,8 @@ function createBasket(mirrored = false) {
   basketGroup.add(arm);
 
   // backboard
-  const backboardWidth = 1.83;
-  const backboardHeight = 1.1;
+  const backboardWidth = 2.3;
+  const backboardHeight = 1.8;
   const backboardThickness = 0.03;
   const backboardGeometry = new THREE.BoxGeometry(
     backboardWidth,
@@ -791,3 +824,4 @@ scoreElement.innerHTML = `
   <h3>Score: ${currentScore}</h3>
 `;
 document.body.appendChild(scoreElement);
+
