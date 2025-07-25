@@ -2,14 +2,52 @@
 <html>
 	<head>
 		<meta charset="utf-8">
-		<title>HW5</title>
+		<title>HW6</title>
 		<style>
-			body { margin: 0; }
+			body { margin: 0; font-family: Arial, sans-serif; }
+            #ui-panel {
+                position: absolute;
+                top: 20px;
+                left: 20px;
+                background-color: rgba(0, 0, 0, 0.7);
+                color: white;
+                padding: 15px;
+                border-radius: 10px;
+                width: 250px;
+                font-size: 16px;
+            }
+            #ui-panel h3 {
+                margin-top: 0;
+                color: #f88158;
+                border-bottom: 1px solid #555;
+                padding-bottom: 5px;
+            }
+            #ui-panel p {
+                margin: 5px 0;
+            }
+            #power-indicator {
+                width: 100%;
+                background-color: #555;
+                border-radius: 5px;
+                margin-top: 5px;
+            }
+            #power-bar {
+                width: 50%;
+                height: 15px;
+                background-color: #f88158;
+                border-radius: 5px;
+                transition: width 0.1s;
+            }
+            #message-display {
+                margin-top: 10px;
+                font-weight: bold;
+                color: #ffeb3b;
+                min-height: 20px;
+            }
 		</style>
 		<script src='https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'></script>
 	</head>
 	<body>
 		<script src="src/hw5.js" type="module"></script>
-
 	</body>
 </html>

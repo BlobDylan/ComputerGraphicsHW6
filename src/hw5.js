@@ -17,6 +17,12 @@ const BALL_BOUNCINESS = 0.7; // 0 = no bounce, 1 = perfect bounce
 const RIM_BOUNCINESS = 0.8;
 // -----------------------------------------
 
+// Game State
+let score = 0;
+let shotAttempts = 0;
+let shotsMade = 0;
+let canScore = false;
+
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(
   75,
@@ -85,6 +91,7 @@ function createBasketballCourt() {
 
 // Create all elements
 createBasketballCourt();
+createUI();
 
 // Set camera position for better view
 const cameraTranslate = new THREE.Matrix4();
@@ -95,35 +102,50 @@ camera.applyMatrix4(cameraTranslate);
 const controls = new OrbitControls(camera, renderer.domElement);
 let isOrbitEnabled = true;
 
-// Instructions display
-const instructionsElement = document.createElement("div");
-instructionsElement.style.position = "absolute";
-instructionsElement.style.bottom = "20px";
-instructionsElement.style.left = "20px";
-instructionsElement.style.color = "white";
-instructionsElement.style.fontSize = "16px";
-instructionsElement.style.fontFamily = "Arial, sans-serif";
-instructionsElement.style.textAlign = "left";
-instructionsElement.innerHTML = `
-  <h3>Controls:</h3>
-  <p>O - Toggle orbit camera</p>
-  <p>Arrow Keys - Move the ball</p>
-  <p>R - Reset ball position</p>
-  <p>W/S - Adjust shot power</p>
-  <p>Spacebar - Shoot</p>
-`;
-document.body.appendChild(instructionsElement);
+function createUI() {
+  const panel = document.createElement("div");
+  panel.id = "ui-panel";
+  panel.innerHTML = `
+    <h3>Game Stats</h3>
+    <p>Score: <span id="score">0</span></p>
+    <p>Shots: <span id="shots-made">0</span> / <span id="shot-attempts">0</span></p>
+    <p>Accuracy: <span id="accuracy">0.00</span>%</p>
+    
+    <h3>Shot Power: <span id="power-level">50</span>%</h3>
+    <div id="power-indicator"><div id="power-bar"></div></div>
+    
+    <div id="message-display"></div>
 
-// Power indicator
-const powerElement = document.createElement("div");
-powerElement.style.position = "absolute";
-powerElement.style.bottom = "150px";
-powerElement.style.left = "20px";
-powerElement.style.color = "white";
-powerElement.style.fontSize = "16px";
-powerElement.style.fontFamily = "Arial, sans-serif";
-powerElement.innerHTML = `<h3>Power: ${shotPower}%</h3>`;
-document.body.appendChild(powerElement);
+    <h3>Controls</h3>
+    <p><b>Arrow Keys:</b> Move Ball</p>
+    <p><b>W/S:</b> Adjust Power</p>
+    <p><b>Spacebar:</b> Shoot</p>
+    <p><b>R:</b> Reset Ball</p>
+    <p><b>O:</b> Toggle Camera</p>
+    `;
+  document.body.appendChild(panel);
+  updateUI();
+}
+
+function updateUI() {
+  document.getElementById("score").innerText = score;
+  document.getElementById("shots-made").innerText = shotsMade;
+  document.getElementById("shot-attempts").innerText = shotAttempts;
+  const accuracy = shotAttempts > 0 ? (shotsMade / shotAttempts) * 100 : 0;
+  document.getElementById("accuracy").innerText = accuracy.toFixed(2);
+  document.getElementById("power-level").innerText = shotPower;
+  document.getElementById("power-bar").style.width = `${shotPower}%`;
+}
+
+function showMessage(msg, duration = 2000) {
+  const messageDisplay = document.getElementById("message-display");
+  messageDisplay.innerText = msg;
+  setTimeout(() => {
+    if (messageDisplay.innerText === msg) {
+      messageDisplay.innerText = "";
+    }
+  }, duration);
+}
 
 const movement = {
   forward: false,
@@ -140,25 +162,28 @@ function handleKeyDown(e) {
     ballGroup.position.copy(initialBallPosition);
     ballGroup.rotation.set(0, 0, 0);
     isShooting = false;
+    canScore = false;
     ballVelocity.set(0, 0, 0);
     shotPower = 50;
-    powerElement.innerHTML = `<h3>Power: ${shotPower}%</h3>`;
+    updateUI();
     updateTrajectory();
   }
 
   if (e.key === "w") {
     shotPower = Math.min(100, shotPower + 5);
-    powerElement.innerHTML = `<h3>Power: ${shotPower}%</h3>`;
+    updateUI();
     updateTrajectory();
   }
   if (e.key === "s") {
     shotPower = Math.max(0, shotPower - 5);
-    powerElement.innerHTML = `<h3>Power: ${shotPower}%</h3>`;
+    updateUI();
     updateTrajectory();
   }
 
   if (e.key === " " && !isShooting) {
     isShooting = true;
+    canScore = true;
+    shotAttempts++;
     trajectoryLine.visible = false;
     const targetHoop =
       ballGroup.position.distanceTo(hoopPositions[0]) <
@@ -175,6 +200,7 @@ function handleKeyDown(e) {
 
     ballVelocity.copy(direction).multiplyScalar(initialSpeed);
     ballVelocity.y += upwardForce;
+    updateUI();
   }
 
   const state = e.type === "keydown";
@@ -231,6 +257,11 @@ function animate() {
 
       // Stop bouncing if velocity is low
       if (Math.abs(ballVelocity.y) < 1) {
+        if (canScore) {
+          // If it can score and stops, it's a miss
+          showMessage("MISSED SHOT");
+          canScore = false;
+        }
         isShooting = false;
         ballVelocity.set(0, 0, 0);
         updateTrajectory();
@@ -350,11 +381,11 @@ function checkCollisions() {
     }
   });
 
-  // Rim collision
+  // Rim and Scoring collision
   rims.forEach((rim, index) => {
     const rimCenter = hoopPositions[index];
-    const rimRadius = 0.7; // As defined in createBasket
-    const rimThickness = 0.02; // As defined in createBasket
+    const rimRadius = 0.7;
+    const rimThickness = 0.02;
     const rimHoleRadius = rimRadius - rimThickness;
     const rimY = rimCenter.y;
 
@@ -367,23 +398,27 @@ function checkCollisions() {
     const horizontalDist = horizontalVec.length();
     const verticalDist = Math.abs(ballPos.y - rimY);
 
-    // Check for potential collision with the rim's torus
+    // Scoring Check
     if (
+      canScore &&
+      ballVelocity.y < 0 &&
+      verticalDist < ballRadius &&
+      horizontalDist < rimHoleRadius - ballRadius
+    ) {
+      score += 2;
+      shotsMade++;
+      canScore = false; // Prevent multiple scores per shot
+      showMessage("SHOT MADE!");
+      updateUI();
+    }
+    // Rim bounce check
+    else if (
       verticalDist < ballRadius + rimThickness &&
       horizontalDist < rimRadius + ballRadius
     ) {
-      // Check for a "swish" (ball going through the hole)
-      if (horizontalDist < rimHoleRadius - ballRadius && ballVelocity.y < 0) {
-        // Ball is clearly inside the hoop and moving down, let it pass for a score.
-        // No collision response needed here.
-      } else {
-        // It's a bounce off the rim.
-        ballVelocity.y *= -RIM_BOUNCINESS; // Reflect and dampen vertical velocity.
-
-        // Add a horizontal bounce away from the rim's center.
-        const bounceDirection = horizontalVec.normalize();
-        ballVelocity.add(bounceDirection.multiplyScalar(0.5)); // Tweak scalar for bounce strength.
-      }
+      ballVelocity.y *= -RIM_BOUNCINESS;
+      const bounceDirection = horizontalVec.normalize();
+      ballVelocity.add(bounceDirection.multiplyScalar(0.5));
     }
   });
 }
@@ -819,18 +854,3 @@ function createNetWithLines(
 
   return netGroup;
 }
-
-// Score Element
-const currentScore = 0;
-const scoreElement = document.createElement("div");
-scoreElement.style.position = "absolute";
-scoreElement.style.top = "20px";
-scoreElement.style.left = "20px";
-scoreElement.style.color = "white";
-scoreElement.style.fontSize = "16px";
-scoreElement.style.fontFamily = "Arial, sans-serif";
-scoreElement.style.textAlign = "left";
-scoreElement.innerHTML = `
-  <h3>Score: ${currentScore}</h3>
-`;
-document.body.appendChild(scoreElement);
