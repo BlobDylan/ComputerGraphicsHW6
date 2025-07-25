@@ -9,8 +9,8 @@ const Colors = {
   WHITE: 0xffffff,
   ORANGE: 0xf88158,
 };
-// --- Physics (tweak these for feel) ---
-const GRAVITY = -9.8; // m/s^2
+// --- Physics  ---
+const GRAVITY = -9.8;
 const COURT_WIDTH = 30;
 const COURT_DEPTH = 15;
 const BALL_BOUNCINESS = 0.7; // 0 = no bounce, 1 = perfect bounce
@@ -60,7 +60,7 @@ const initialBallPosition = new THREE.Vector3(
 // Physics variables
 let ballVelocity = new THREE.Vector3();
 let isShooting = false;
-let shotPower = 50; // Initial power
+let shotPower = 50;
 const hoopPositions = [];
 const backboards = [];
 const poles = [];
@@ -75,7 +75,6 @@ function degrees_to_radians(degrees) {
 
 // Create basketball court
 function createBasketballCourt() {
-  // Court floor - just a simple brown surface
   const courtGeometry = new THREE.BoxGeometry(COURT_WIDTH, 0.2, COURT_DEPTH);
   const courtMaterial = new THREE.MeshPhongMaterial({
     color: 0xc68642, // Brown wood color
@@ -153,7 +152,7 @@ const movement = {
   left: false,
   right: false,
 };
-// Handle key events
+
 function handleKeyDown(e) {
   if (e.key === "o") {
     isOrbitEnabled = !isOrbitEnabled;
@@ -194,9 +193,9 @@ function handleKeyDown(e) {
     const direction = new THREE.Vector3()
       .subVectors(targetHoop, ballGroup.position)
       .normalize();
-    // --- Shot power and arc (tweak for feel) ---
-    const initialSpeed = shotPower / 4; // Tweak the divisor to change power sensitivity
-    const upwardForce = 7; // Tweak this for a higher/lower arc
+    // --- Shot power and arc  ---
+    const initialSpeed = shotPower / 4;
+    const upwardForce = 7;
 
     ballVelocity.copy(direction).multiplyScalar(initialSpeed);
     ballVelocity.y += upwardForce;
@@ -241,7 +240,7 @@ document.addEventListener("keydown", handleKeyDown);
 document.addEventListener("keyup", handleKeyUp);
 
 const clock = new THREE.Clock();
-// Animation function
+
 function animate() {
   requestAnimationFrame(animate);
   const delta = clock.getDelta();
@@ -250,27 +249,28 @@ function animate() {
     ballVelocity.y += GRAVITY * delta;
     ballGroup.position.add(ballVelocity.clone().multiplyScalar(delta));
 
-    // In-air rotation
-    const rotationAxis = new THREE.Vector3(ballVelocity.z, 0, -ballVelocity.x).normalize();
+    const rotationAxis = new THREE.Vector3(
+      ballVelocity.z,
+      0,
+      -ballVelocity.x
+    ).normalize();
     const rotationSpeed = ballVelocity.length() * 0.1;
     ballGroup.rotateOnAxis(rotationAxis, rotationSpeed * delta);
 
-
-    // Ground collision
     if (ballGroup.position.y < COURT_Y_SURFACE + ballRadius) {
       ballGroup.position.y = COURT_Y_SURFACE + ballRadius;
       ballVelocity.y *= -BALL_BOUNCINESS;
 
-      // Out-of-bounds check
-      if (Math.abs(ballGroup.position.x) > COURT_WIDTH / 2 || Math.abs(ballGroup.position.z) > COURT_DEPTH / 2) {
-        handleKeyDown({ key: "r" }); // Reset the ball
+      if (
+        Math.abs(ballGroup.position.x) > COURT_WIDTH / 2 ||
+        Math.abs(ballGroup.position.z) > COURT_DEPTH / 2
+      ) {
+        handleKeyDown({ key: "r" });
         return;
       }
 
-      // Stop bouncing if velocity is low
       if (Math.abs(ballVelocity.y) < 1) {
         if (canScore) {
-          // If it can score and stops, it's a miss
           showMessage("MISSED SHOT");
           canScore = false;
         }
@@ -300,7 +300,7 @@ function animate() {
       ballGroup.position.x += moveSpeed * delta;
       ballGroup.rotation.z -= rotationSpeed;
     }
-    // Boundary checks
+
     ballGroup.position.x = Math.max(
       -COURT_WIDTH / 2 + ballRadius,
       Math.min(COURT_WIDTH / 2 - ballRadius, ballGroup.position.x)
@@ -312,7 +312,6 @@ function animate() {
     updateTrajectory();
   }
 
-  // Update controls
   controls.enabled = isOrbitEnabled;
   controls.update();
 
@@ -320,8 +319,6 @@ function animate() {
 }
 
 animate();
-
-// ------------------------------------------------------------------------
 
 function createCourtElements() {
   createBasketball();
@@ -357,7 +354,6 @@ function updateTrajectory() {
     .subVectors(targetHoop, startPos)
     .normalize();
 
-  // Use the same tweaked values for trajectory prediction
   const initialSpeed = shotPower / 4;
   const upwardForce = 7;
   const tempVelocity = direction.multiplyScalar(initialSpeed);
@@ -365,7 +361,7 @@ function updateTrajectory() {
 
   let tempPos = startPos.clone();
   for (let i = 0; i < 100; i++) {
-    tempVelocity.y += GRAVITY * 0.016; // Use a fixed delta for prediction
+    tempVelocity.y += GRAVITY * 0.016;
     tempPos.add(tempVelocity.clone().multiplyScalar(0.016));
     points.push(tempPos.clone());
     if (tempPos.y < COURT_Y_SURFACE + ballRadius) break;
@@ -376,16 +372,13 @@ function updateTrajectory() {
 function checkCollisions() {
   const ballSphere = new THREE.Sphere(ballGroup.position, ballRadius);
 
-  // Backboard collision
   backboards.forEach((backboard) => {
     const backboardBox = new THREE.Box3().setFromObject(backboard);
     if (backboardBox.intersectsSphere(ballSphere)) {
-      // Simple reflection off the backboard
       ballVelocity.x *= -1;
     }
   });
 
-  // Pole collision
   poles.forEach((pole) => {
     const poleBox = new THREE.Box3().setFromObject(pole);
     if (poleBox.intersectsSphere(ballSphere)) {
@@ -393,7 +386,6 @@ function checkCollisions() {
     }
   });
 
-  // Rim and Scoring collision
   rims.forEach((rim, index) => {
     const rimCenter = hoopPositions[index];
     const rimRadius = 0.7;
@@ -408,15 +400,14 @@ function checkCollisions() {
       ballPos.z - rimCenter.z
     );
     const horizontalDist = horizontalVec.length();
-    const verticalDist = ballPos.y - rimY; // Changed to signed distance
+    const verticalDist = ballPos.y - rimY;
 
-    // Scoring Check - improved to detect balls passing through hoop
     if (
       canScore &&
-      ballVelocity.y < 0 && // Ball is falling
-      verticalDist > -ballRadius && // Ball is above rim level
-      verticalDist < ballRadius && // Ball is near rim level
-      horizontalDist < rimHoleRadius - ballRadius // Ball is within net area
+      ballVelocity.y < 0 &&
+      verticalDist > -ballRadius &&
+      verticalDist < ballRadius &&
+      horizontalDist < rimHoleRadius - ballRadius
     ) {
       score += 2;
       shotsMade++;
@@ -424,14 +415,12 @@ function checkCollisions() {
       showMessage("SHOT MADE!");
       updateUI();
 
-      // Apply downward force to guide ball through net
-      ballVelocity.y = -3; // Gentle downward push
+      ballVelocity.y = -3;
       ballVelocity.x *= 0.3;
       ballVelocity.z *= 0.3;
-      return; // Skip bounce checks after scoring
+      return;
     }
 
-    // Rim bounce check - more realistic physics
     const isAboveRim = ballPos.y > rimY;
     const rimContact =
       Math.abs(verticalDist) < ballRadius + rimThickness &&
@@ -439,26 +428,20 @@ function checkCollisions() {
       horizontalDist < rimRadius + ballRadius;
 
     if (rimContact) {
-      // Realistic rim bounce physics
       if (isAboveRim) {
-        // Top of rim hit
         ballVelocity.y *= -RIM_BOUNCINESS;
       } else {
-        // Bottom of rim hit (bank shot)
         ballVelocity.y *= -RIM_BOUNCINESS * 0.6;
       }
 
-      // Add horizontal spin effect based on approach angle
       const approachAngle = Math.atan2(ballVelocity.z, ballVelocity.x);
       const rimAngle = Math.atan2(horizontalVec.z, horizontalVec.x);
       const angleDiff = approachAngle - rimAngle;
 
-      // Apply spin force
       const spinPower = 0.5 * Math.sin(angleDiff);
       ballVelocity.x += spinPower * horizontalVec.z;
       ballVelocity.z -= spinPower * horizontalVec.x;
 
-      // Reduce horizontal velocity after bounce
       ballVelocity.x *= 0.7;
       ballVelocity.z *= 0.7;
     }
@@ -484,7 +467,6 @@ function createBasketball() {
   const ball = new THREE.Mesh(geometry, material);
   ball.castShadow = true;
 
-  // black lines
   const ringMaterial = new THREE.MeshBasicMaterial({ color: lineColor });
   const ringThickness = 0.01;
 
@@ -660,7 +642,6 @@ function createSingleOnshinPointLine(mirrored = false) {
       ],
       size: [straightLineLength, LINES_HEIGHT, LINES_WIDTH],
     },
-    // parallel line to Z axis
     {
       pos: [arc.position.x, arc.position.y, arc.position.z],
       size: [
@@ -868,7 +849,6 @@ function createNetWithLines(
     netGroup.add(ring);
   }
 
-  // vertical lines
   for (let i = 0; i < verticalLineCount; i++) {
     const angle = (i / verticalLineCount) * Math.PI * 2;
     const points = [];
