@@ -170,12 +170,12 @@ function handleKeyDown(e) {
   }
 
   if (e.key === "w") {
-    shotPower = Math.min(100, shotPower + 5);
+    shotPower = Math.min(100, shotPower + 2);
     updateUI();
     updateTrajectory();
   }
   if (e.key === "s") {
-    shotPower = Math.max(0, shotPower - 5);
+    shotPower = Math.max(0, shotPower - 2);
     updateUI();
     updateTrajectory();
   }
@@ -396,29 +396,59 @@ function checkCollisions() {
       ballPos.z - rimCenter.z
     );
     const horizontalDist = horizontalVec.length();
-    const verticalDist = Math.abs(ballPos.y - rimY);
+    const verticalDist = ballPos.y - rimY; // Changed to signed distance
 
-    // Scoring Check
+    // Scoring Check - improved to detect balls passing through hoop
     if (
       canScore &&
-      ballVelocity.y < 0 &&
-      verticalDist < ballRadius &&
-      horizontalDist < rimHoleRadius - ballRadius
+      ballVelocity.y < 0 && // Ball is falling
+      verticalDist > -ballRadius && // Ball is above rim level
+      verticalDist < ballRadius && // Ball is near rim level
+      horizontalDist < rimHoleRadius - ballRadius // Ball is within net area
     ) {
       score += 2;
       shotsMade++;
-      canScore = false; // Prevent multiple scores per shot
+      canScore = false;
       showMessage("SHOT MADE!");
       updateUI();
+
+      // Apply downward force to guide ball through net
+      ballVelocity.y = -3; // Gentle downward push
+      ballVelocity.x *= 0.3;
+      ballVelocity.z *= 0.3;
+      return; // Skip bounce checks after scoring
     }
-    // Rim bounce check
-    else if (
-      verticalDist < ballRadius + rimThickness &&
-      horizontalDist < rimRadius + ballRadius
-    ) {
-      ballVelocity.y *= -RIM_BOUNCINESS;
-      const bounceDirection = horizontalVec.normalize();
-      ballVelocity.add(bounceDirection.multiplyScalar(0.5));
+
+    // Rim bounce check - more realistic physics
+    const isAboveRim = ballPos.y > rimY;
+    const rimContact =
+      Math.abs(verticalDist) < ballRadius + rimThickness &&
+      horizontalDist > rimHoleRadius - ballRadius &&
+      horizontalDist < rimRadius + ballRadius;
+
+    if (rimContact) {
+      // Realistic rim bounce physics
+      if (isAboveRim) {
+        // Top of rim hit
+        ballVelocity.y *= -RIM_BOUNCINESS;
+      } else {
+        // Bottom of rim hit (bank shot)
+        ballVelocity.y *= -RIM_BOUNCINESS * 0.6;
+      }
+
+      // Add horizontal spin effect based on approach angle
+      const approachAngle = Math.atan2(ballVelocity.z, ballVelocity.x);
+      const rimAngle = Math.atan2(horizontalVec.z, horizontalVec.x);
+      const angleDiff = approachAngle - rimAngle;
+
+      // Apply spin force
+      const spinPower = 0.5 * Math.sin(angleDiff);
+      ballVelocity.x += spinPower * horizontalVec.z;
+      ballVelocity.z -= spinPower * horizontalVec.x;
+
+      // Reduce horizontal velocity after bounce
+      ballVelocity.x *= 0.7;
+      ballVelocity.z *= 0.7;
     }
   });
 }
