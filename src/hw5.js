@@ -9,6 +9,7 @@ const Colors = {
   WHITE: 0xffffff,
   ORANGE: 0xf88158,
 };
+const GRAVITY = -9.8;
 // -----------------------------------------
 
 const scene = new THREE.Scene();
@@ -36,6 +37,20 @@ scene.add(directionalLight);
 // Enable shadows
 renderer.shadowMap.enabled = true;
 directionalLight.castShadow = true;
+
+let ballGroup;
+const ballRadius = 0.749 / 2;
+const initialBallPosition = new THREE.Vector3(
+  0,
+  COURT_Y_SURFACE + ballRadius,
+  0
+);
+
+// Physics variables
+let ballVelocity = new THREE.Vector3();
+let isShooting = false;
+let shotPower = 50; // Initial power
+const hoopPositions = [];
 
 function degrees_to_radians(degrees) {
   var pi = Math.PI;
@@ -82,21 +97,148 @@ instructionsElement.style.textAlign = "left";
 instructionsElement.innerHTML = `
   <h3>Controls:</h3>
   <p>O - Toggle orbit camera</p>
+  <p>Arrow Keys - Move the ball</p>
+  <p>R - Reset ball position</p>
+  <p>W/S - Adjust shot power</p>
+  <p>Spacebar - Shoot</p>
 `;
 document.body.appendChild(instructionsElement);
 
+// Power indicator
+const powerElement = document.createElement("div");
+powerElement.style.position = "absolute";
+powerElement.style.bottom = "150px";
+powerElement.style.left = "20px";
+powerElement.style.color = "white";
+powerElement.style.fontSize = "16px";
+powerElement.style.fontFamily = "Arial, sans-serif";
+powerElement.innerHTML = `<h3>Power: ${shotPower}%</h3>`;
+document.body.appendChild(powerElement);
+
+const movement = {
+  forward: false,
+  backward: false,
+  left: false,
+  right: false,
+};
 // Handle key events
 function handleKeyDown(e) {
   if (e.key === "o") {
     isOrbitEnabled = !isOrbitEnabled;
   }
+  if (e.key === "r") {
+    ballGroup.position.copy(initialBallPosition);
+    ballGroup.rotation.set(0, 0, 0);
+    isShooting = false;
+    ballVelocity.set(0, 0, 0);
+    shotPower = 50;
+    powerElement.innerHTML = `<h3>Power: ${shotPower}%</h3>`;
+  }
+
+  if (e.key === "w") {
+    shotPower = Math.min(100, shotPower + 5);
+    powerElement.innerHTML = `<h3>Power: ${shotPower}%</h3>`;
+  }
+  if (e.key === "s") {
+    shotPower = Math.max(0, shotPower - 5);
+    powerElement.innerHTML = `<h3>Power: ${shotPower}%</h3>`;
+  }
+
+  if (e.key === " " && !isShooting) {
+    isShooting = true;
+    const targetHoop =
+      ballGroup.position.distanceTo(hoopPositions[0]) <
+      ballGroup.position.distanceTo(hoopPositions[1])
+        ? hoopPositions[0]
+        : hoopPositions[1];
+
+    const direction = new THREE.Vector3()
+      .subVectors(targetHoop, ballGroup.position)
+      .normalize();
+    const initialSpeed = shotPower / 5;
+    ballVelocity.copy(direction).multiplyScalar(initialSpeed);
+    ballVelocity.y += 5; // Add some initial upward velocity
+  }
+
+  const state = e.type === "keydown";
+  switch (e.key) {
+    case "ArrowUp":
+      movement.forward = state;
+      break;
+    case "ArrowDown":
+      movement.backward = state;
+      break;
+    case "ArrowLeft":
+      movement.left = state;
+      break;
+    case "ArrowRight":
+      movement.right = state;
+      break;
+  }
+}
+function handleKeyUp(e) {
+  const state = e.type === "keydown";
+  switch (e.key) {
+    case "ArrowUp":
+      movement.forward = state;
+      break;
+    case "ArrowDown":
+      movement.backward = state;
+      break;
+    case "ArrowLeft":
+      movement.left = state;
+      break;
+    case "ArrowRight":
+      movement.right = state;
+      break;
+  }
 }
 
 document.addEventListener("keydown", handleKeyDown);
+document.addEventListener("keyup", handleKeyUp);
 
+const clock = new THREE.Clock();
 // Animation function
 function animate() {
   requestAnimationFrame(animate);
+  const delta = clock.getDelta();
+
+  if (isShooting) {
+    ballVelocity.y += GRAVITY * delta;
+    ballGroup.position.add(ballVelocity.clone().multiplyScalar(delta));
+
+    // Ground collision
+    if (ballGroup.position.y < COURT_Y_SURFACE + ballRadius) {
+      ballGroup.position.y = COURT_Y_SURFACE + ballRadius;
+      ballVelocity.y *= -0.7; // Restitution
+
+      // Stop bouncing if velocity is low
+      if (Math.abs(ballVelocity.y) < 1) {
+        isShooting = false;
+        ballVelocity.set(0, 0, 0);
+      }
+    }
+  } else {
+    const moveSpeed = 5;
+    const rotationSpeed = 0.1;
+
+    if (movement.forward) {
+      ballGroup.position.z -= moveSpeed * delta;
+      ballGroup.rotation.x -= rotationSpeed;
+    }
+    if (movement.backward) {
+      ballGroup.position.z += moveSpeed * delta;
+      ballGroup.rotation.x += rotationSpeed;
+    }
+    if (movement.left) {
+      ballGroup.position.x -= moveSpeed * delta;
+      ballGroup.rotation.z += rotationSpeed;
+    }
+    if (movement.right) {
+      ballGroup.position.x += moveSpeed * delta;
+      ballGroup.rotation.z -= rotationSpeed;
+    }
+  }
 
   // Update controls
   controls.enabled = isOrbitEnabled;
@@ -123,7 +265,6 @@ function createCourtLines() {
 }
 
 function createBasketball() {
-  const ballRadius = 0.749 / 2;
   const ballColor = Colors.ORANGE;
   const lineColor = 0x000000;
 
@@ -176,11 +317,11 @@ function createBasketball() {
 
   rings.push(ring5);
 
-  const ballGroup = new THREE.Group();
+  ballGroup = new THREE.Group();
   ballGroup.add(ball);
   rings.forEach((ring) => ballGroup.add(ring));
 
-  ballGroup.position.set(0, COURT_Y_SURFACE + ballRadius, 0);
+  ballGroup.position.copy(initialBallPosition);
   scene.add(ballGroup);
 }
 
@@ -446,7 +587,7 @@ function createBasket(mirrored = false) {
   basketGroup.add(backboard);
 
   // rim
-  const rimRadius = 0.23;
+  const rimRadius = 0.5;
   const rimThickness = 0.02;
   const rimGeometry = new THREE.TorusGeometry(rimRadius, rimThickness, 16, 32);
   const rimMaterial = new THREE.MeshPhongMaterial({
@@ -466,7 +607,7 @@ function createBasket(mirrored = false) {
   basketGroup.add(rim);
 
   // net
-  const netGroup = createNetWithLines(rim.position, rimRadius, 0.4, 5, 12);
+  const netGroup = createNetWithLines(rim.position, rimRadius, 0.6, 5, 12);
   basketGroup.add(netGroup);
 
   const xPos = mirrored ? 15 : -15;
@@ -474,6 +615,10 @@ function createBasket(mirrored = false) {
   basketGroup.position.set(xPos, 0, 0);
   basketGroup.castShadow = true;
   scene.add(basketGroup);
+
+  const hoopWorldPosition = new THREE.Vector3();
+  rim.getWorldPosition(hoopWorldPosition);
+  hoopPositions.push(hoopWorldPosition);
 }
 
 function createNetWithLines(
