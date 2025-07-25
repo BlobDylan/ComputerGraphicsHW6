@@ -44,7 +44,7 @@ renderer.shadowMap.enabled = true;
 directionalLight.castShadow = true;
 
 let ballGroup;
-const ballRadius = 0.749 / 2;
+const ballRadius = 0.3;
 const initialBallPosition = new THREE.Vector3(
   0,
   COURT_Y_SURFACE + ballRadius,
@@ -353,26 +353,36 @@ function checkCollisions() {
   // Rim collision
   rims.forEach((rim, index) => {
     const rimCenter = hoopPositions[index];
-    const rimRadius = 0.5;
+    const rimRadius = 0.7; // As defined in createBasket
+    const rimThickness = 0.02; // As defined in createBasket
+    const rimHoleRadius = rimRadius - rimThickness;
     const rimY = rimCenter.y;
 
-    const distToRimCenter = ballGroup.position.distanceTo(
-      new THREE.Vector3(rimCenter.x, ballGroup.position.y, rimCenter.z)
+    const ballPos = ballGroup.position;
+    const horizontalVec = new THREE.Vector3(
+      ballPos.x - rimCenter.x,
+      0,
+      ballPos.z - rimCenter.z
     );
+    const horizontalDist = horizontalVec.length();
+    const verticalDist = Math.abs(ballPos.y - rimY);
 
-    // Check if ball is roughly at rim height and within its horizontal radius
+    // Check for potential collision with the rim's torus
     if (
-      Math.abs(ballGroup.position.y - rimY) < ballRadius &&
-      distToRimCenter < rimRadius + ballRadius
+      verticalDist < ballRadius + rimThickness &&
+      horizontalDist < rimRadius + ballRadius
     ) {
-      // If ball is moving downwards, it might be a score (handled later)
-      // For now, let's make it bounce off the rim
-      if (ballVelocity.y < 0) {
-        // Don't dampen here to avoid the "slow slide"
-        // A more complex collision response would be needed for perfect physics
+      // Check for a "swish" (ball going through the hole)
+      if (horizontalDist < rimHoleRadius - ballRadius && ballVelocity.y < 0) {
+        // Ball is clearly inside the hoop and moving down, let it pass for a score.
+        // No collision response needed here.
       } else {
-        // Bounce off the top of the rim if moving upwards
-        ballVelocity.y *= -RIM_BOUNCINESS;
+        // It's a bounce off the rim.
+        ballVelocity.y *= -RIM_BOUNCINESS; // Reflect and dampen vertical velocity.
+
+        // Add a horizontal bounce away from the rim's center.
+        const bounceDirection = horizontalVec.normalize();
+        ballVelocity.add(bounceDirection.multiplyScalar(0.5)); // Tweak scalar for bounce strength.
       }
     }
   });
@@ -710,7 +720,7 @@ function createBasket(mirrored = false) {
   backboards.push(backboard);
 
   // rim
-  const rimRadius = 0.5;
+  const rimRadius = 0.7;
   const rimThickness = 0.02;
   const rimGeometry = new THREE.TorusGeometry(rimRadius, rimThickness, 16, 32);
   const rimMaterial = new THREE.MeshPhongMaterial({
@@ -824,4 +834,3 @@ scoreElement.innerHTML = `
   <h3>Score: ${currentScore}</h3>
 `;
 document.body.appendChild(scoreElement);
-
