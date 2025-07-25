@@ -250,10 +250,22 @@ function animate() {
     ballVelocity.y += GRAVITY * delta;
     ballGroup.position.add(ballVelocity.clone().multiplyScalar(delta));
 
+    // In-air rotation
+    const rotationAxis = new THREE.Vector3(ballVelocity.z, 0, -ballVelocity.x).normalize();
+    const rotationSpeed = ballVelocity.length() * 0.1;
+    ballGroup.rotateOnAxis(rotationAxis, rotationSpeed * delta);
+
+
     // Ground collision
     if (ballGroup.position.y < COURT_Y_SURFACE + ballRadius) {
       ballGroup.position.y = COURT_Y_SURFACE + ballRadius;
       ballVelocity.y *= -BALL_BOUNCINESS;
+
+      // Out-of-bounds check
+      if (Math.abs(ballGroup.position.x) > COURT_WIDTH / 2 || Math.abs(ballGroup.position.z) > COURT_DEPTH / 2) {
+        handleKeyDown({ key: "r" }); // Reset the ball
+        return;
+      }
 
       // Stop bouncing if velocity is low
       if (Math.abs(ballVelocity.y) < 1) {
